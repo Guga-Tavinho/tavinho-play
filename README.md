@@ -8,15 +8,12 @@ O Tavinho Play permite escolher vídeos em uma lista, navegar pelas pastas do pe
 
 O aplicativo é executado pelo USB. A instalação não grava uma nova firmware na memória do receptor. O controle de tempo e de busca usa um módulo nativo específico da plataforma analisada; por isso, a compatibilidade não é universal com todo aparelho que tenha Ginga.
 
-![Tavinho Play no modo Letras grandes](docs/images/letras-grandes.png)
-
-*Prévia renderizada localmente a partir do tema do aplicativo. A nitidez na TV depende também da saída do receptor, da conexão e da própria tela.*
-
 ## Índice
 
 - [Recursos](#recursos)
 - [Compatibilidade e requisitos](#compatibilidade-e-requisitos)
 - [Quais arquivos ele reproduz?](#quais-arquivos-ele-reproduz)
+- [Converter e inspecionar vídeos](#converter-e-inspecionar-vídeos)
 - [Instalar pela primeira vez](#instalar-pela-primeira-vez)
 - [Organizar e cadastrar os vídeos](#organizar-e-cadastrar-os-vídeos)
 - [Controles](#controles)
@@ -28,6 +25,7 @@ O aplicativo é executado pelo USB. A instalação não grava uma nova firmware 
 - [Limitações](#limitações)
 - [Resolver problemas](#resolver-problemas)
 - [Desenvolvimento e verificação](#desenvolvimento-e-verificação)
+- [Publicar no GitHub](#publicar-no-github)
 - [Créditos e licença](#créditos-e-licença)
 
 ## Recursos
@@ -61,7 +59,7 @@ O aplicativo é executado pelo USB. A instalação não grava uma nova firmware 
 | Internet no receptor | Dispensável para usar o player |
 | Computador | Útil para copiar arquivos; Windows é necessário apenas para o atualizador `.cmd`/`.ps1` |
 
-O funcionamento foi desenvolvido e testado no RE510 usado no projeto. As funções principais tiveram confirmação no aparelho durante o desenvolvimento; os últimos ajustes visuais também foram conferidos em simulação. Consulte [a verificação da release](docs/VERIFICACAO.md) para distinguir os testes locais dos testes físicos.
+O funcionamento foi desenvolvido e testado no RE510 usado no projeto. As funções principais tiveram confirmação no aparelho durante o desenvolvimento; os últimos ajustes visuais também foram conferidos em simulação. A montagem completa de distribuição e o novo exemplo de vídeo ainda precisam ser conferidos no receptor físico. Os testes locais não garantem compatibilidade com outras revisões de firmware, modelos ou codecs.
 
 **Ter Ginga, por si só, não garante compatibilidade.** Outro receptor precisa permitir iniciar aplicativos pelo USB, acessar os arquivos e disponibilizar um ambiente compatível. O módulo de tempo depende de bibliotecas e estruturas internas da firmware V1.11.0. Mesmo um processador MIPS ou um chipset semelhante não bastam para garantir que esse módulo funcione em outro aparelho.
 
@@ -100,7 +98,45 @@ O caminho usado como referência nos testes é **vídeo H.264/AVC com áudio AAC
 
 Esses valores descrevem o exemplo e uma configuração conservadora para experimentar. **Não representam uma especificação de limite máximo do RE510.** Perfis, níveis, resolução, bitrate, codificação de áudio e integridade dos arquivos continuam dependendo do decodificador do aparelho.
 
-Se precisar converter um arquivo no computador, veja [conversão com FFmpeg](docs/CONVERSAO.md). Não é necessário instalar FFmpeg para reproduzir o exemplo ou usar o aplicativo no receptor.
+Se precisar converter um arquivo no computador, use as instruções da próxima seção. Não é necessário instalar FFmpeg para reproduzir o exemplo ou usar o aplicativo no receptor.
+
+## Converter e inspecionar vídeos
+
+A conversão é opcional e deve ser feita no computador, com FFmpeg instalado separadamente. O aplicativo não converte vídeos dentro do receptor.
+
+### Conferir os codecs de um arquivo
+
+Com `ffprobe`, execute:
+
+```bash
+ffprobe -v error -show_entries stream=codec_name,codec_type,profile,width,height,pix_fmt,sample_rate,channels -show_entries format=duration,size -of json "entrada.mp4"
+```
+
+O resultado informa codecs, perfil, resolução, áudio, duração e tamanho. Ele também pode ser usado ao relatar um problema com um vídeo específico.
+
+### Gerar um MP4 para experimentar no RE510
+
+O comando abaixo cria um arquivo diferente, usando H.264 Baseline, formato de pixels `yuv420p`, áudio AAC-LC estéreo e imagem de 640 × 480, com barras quando necessário:
+
+```bash
+ffmpeg -n -i "entrada.mkv" -map 0:v:0 -map 0:a:0? -vf "scale=640:480:force_original_aspect_ratio=decrease:force_divisible_by=2,pad=640:480:(ow-iw)/2:(oh-ih)/2,setsar=1" -r 25 -c:v libx264 -profile:v baseline -level:v 3.0 -pix_fmt yuv420p -crf 23 -preset veryfast -c:a aac -profile:a aac_low -b:a 128k -ac 2 -ar 48000 -movflags +faststart "saida-re510.mp4"
+```
+
+Use nomes diferentes para entrada e saída. A opção `-n` impede substituir uma saída já existente. O comando seleciona o primeiro vídeo e, se existir, o primeiro áudio; não cria som para uma entrada sem áudio e não carrega legendas externas.
+
+Esses parâmetros são uma configuração conservadora próxima ao exemplo incluído, não uma declaração dos limites máximos do receptor. Materiais anamórficos ou com proporção de pixel especial podem exigir outro ajuste de imagem.
+
+### Reorganizar um MP4 sem recodificar
+
+Se os codecs já forem compatíveis, você pode reorganizar o contêiner:
+
+```bash
+ffmpeg -n -i "entrada.mp4" -map 0:v:0 -map 0:a:0? -c copy -movflags +faststart "saida-organizada.mp4"
+```
+
+`-c copy` preserva os fluxos e não resolve um codec incompatível. `+faststart` coloca o índice/cabeçalho MP4 no início. O leitor de duração do player também procura `moov` ao final de um MP4 comum, portanto essa reorganização não é obrigatória em todos os arquivos.
+
+Depois de copiar ou renomear a saída no pendrive, atualize o catálogo e reabra o aplicativo.
 
 ## Instalar pela primeira vez
 
@@ -275,10 +311,6 @@ O nome **Resolução**, exibido no botão AZUL, identifica o **perfil de layout 
 
 Pressione **AZUL** para alternar: Padrão → Letras grandes → CRT 5" → Padrão. A seleção é manual. Você pode usar qualquer perfil em qualquer TV, conforme a distância e o conforto de leitura.
 
-![Modo CRT 5 polegadas](docs/images/crt-5.png)
-
-![Barra ampliada durante a seleção de tempo](docs/images/barra-crt-5.png)
-
 O modo escolhido é gravado em `ginga/player-usb-05/source/tela.cfg` e restaurado na próxima abertura. Se não for possível salvar, a troca vale para a sessão e o aplicativo informa a falha. Se a preferência estiver ausente ou inválida, abre no perfil Padrão.
 
 A barra desaparece após **3 segundos sem interação**. Os eventos de atualização do tempo não a mantêm aberta indefinidamente. Uma interação com os controles de reprodução volta a mostrá-la.
@@ -315,7 +347,7 @@ O módulo nativo confere trechos e estruturas da firmware antes de usar o contro
 
 O tratamento de **VOLTAR** inclui a recuperação de foco do Ginga. Isso evita a situação observada durante o desenvolvimento em que a lista aparecia, mas as setas só voltavam a responder depois de pressionar OK.
 
-Detalhes para modificar, recompilar e empacotar estão em [Desenvolvimento](docs/DESENVOLVIMENTO.md).
+As instruções para recompilar o módulo, verificar os arquivos e gerar os pacotes estão na seção Desenvolvimento e verificação deste README.
 
 ## Arquivos e configurações
 
@@ -374,18 +406,54 @@ Para desinstalar o player, feche-o e remova a pasta `ginga/player-usb-05` e os d
 | Mudei o tamanho e ele não ficou salvo | Confira a gravação em `source/tela.cfg`. Uma falha mantém a escolha apenas na sessão atual. |
 | Não consigo sair de “Catálogo atualizado” usando OK | Encerre o aplicativo pelo comando de saída disponível no receptor e abra novamente. Essa tela pede recarga do NCL, não seleção de outro vídeo. |
 
-Para relatar um problema, informe modelo e firmware, versão do player, layout selecionado, botão usado, mensagem exata e se o exemplo reproduz. Para problemas de mídia, informe os codecs e propriedades do arquivo. Um relatório de `ffprobe` pode ajudar; [veja como obtê-lo](docs/CONVERSAO.md).
+Para relatar um problema, informe modelo e firmware, versão do player, layout selecionado, botão usado, mensagem exata e se o exemplo reproduz. Para problemas de mídia, informe os codecs e propriedades do arquivo. Você pode obter um relatório com o comando `ffprobe` apresentado na seção Converter e inspecionar vídeos deste README.
 
 ## Desenvolvimento e verificação
 
-- [Arquitetura, módulo nativo e compilação](docs/DESENVOLVIMENTO.md).
-- [Conversão e inspeção de vídeos](docs/CONVERSAO.md).
-- [O que foi conferido nesta release](docs/VERIFICACAO.md).
-- [Como publicar o repositório e a release no GitHub](docs/PUBLICAR-NO-GITHUB.md).
-- [Histórico de mudanças](CHANGELOG.md).
-- [Texto pronto para a página da release](RELEASE_NOTES.md).
-
 Os arquivos Lua/NCL são fornecidos no pacote. Os fontes do módulo nativo estão em `native/`; a compilação cruzada exige as bibliotecas compatíveis obtidas da firmware de referência. O dump completo e as bibliotecas originais da firmware não acompanham esta distribuição.
+
+### Módulo nativo
+
+O código-fonte está dividido em quatro arquivos:
+
+- `native/re510time63.c`: interface com Lua e integração com a reprodução Ginga/IPC.
+- `native/native_access.c`: localização e leitura das estruturas necessárias.
+- `native/native_layout.h`: endereços e assinaturas da firmware V1.11.0.
+- `native/native_control.inc`: ativação e restauração temporária dos dados da reprodução.
+
+O nome `re510time63.so` foi mantido por compatibilidade com o carregador. Ele não indica a versão do aplicativo completo.
+
+Para recompilar em Linux ou WSL, prepare um compilador MIPS32r2 little endian, O32, hard-float/FP32, e uma árvore privada com as bibliotecas extraídas da firmware:
+
+```text
+firmware-extraida/
+├── mslib/
+│   ├── liblua.so
+│   ├── libipcClient.so.1.0.4
+│   └── ginga/lib/ginga/
+│       ├── libgingaccplayer.so
+│       └── libnclipcclientmanager.so
+└── rootfs/lib/
+    └── libc.so.6
+```
+
+Preserve os arquivos e links de suporte que o linker precisar. Então execute, na raiz do projeto:
+
+```bash
+RE510_FIRMWARE_DIR=/caminho/firmware-extraida CC=mipsel-linux-gnu-gcc sh native/build.sh
+```
+
+A saída fica em `native/build/re510time63.so`. O script não instala o resultado no pendrive automaticamente. A compilação precisa das bibliotecas de referência; elas não são baixadas nem fornecidas pelo player.
+
+O módulo distribuído tem SHA-256:
+
+```text
+6acc9c98dbf63334388225b9c8952eabb700db79ad95bd118f8c44b616c2c307
+```
+
+Na preparação desta release, a recompilação com o toolchain e as bibliotecas usados no projeto produziu esse mesmo hash. Outra versão de compilador/linker pode gerar um binário diferente mesmo com o mesmo código.
+
+### Verificar e empacotar
 
 Para verificar a estrutura e a integridade dos arquivos:
 
@@ -403,6 +471,39 @@ As ferramentas exigem Python **3.9 ou mais recente** no computador; Python não 
 
 Execute essas ferramentas na cópia original do projeto, com o catálogo do exemplo. O verificador exige esse catálogo inicial limpo para evitar empacotar a biblioteca pessoal de quem estiver preparando uma release.
 
+O empacotador grava os ZIPs, hashes e inventário em `dist/`. A pasta é uma saída local e não precisa ser enviada junto com o código-fonte do repositório.
+
+### O que foi verificado
+
+Na preparação da release completa foram conferidos:
+
+- Estrutura de arquivos, manifesto, ícone, documentos NCL, áreas, conectores, referências e catálogo inicial.
+- Instalação nova em simulação Lua 5.1/NCL, sem depender de uma versão antiga no pendrive.
+- Início do exemplo cadastrado, busca, confirmação, ocultação da barra e retorno com os vínculos de foco.
+- Troca dos layouts, preferência salva, créditos, atualização do catálogo e reabertura.
+- Propriedades reais do exemplo por `ffprobe` e leitura de 30 segundos pelo `mp4meta.lua` real.
+- Atualizador Windows com acentos, espaços, vírgula, `&`, subpastas, exclusões, backups e limite de 300 vídeos.
+- Recompilação do módulo nativo e comparação do hash com o binário distribuído.
+- Comando de conversão de vídeo executado no computador.
+- Prévia visual dos três perfis em superfícies de 1280 × 720 e 720 × 480.
+- Integridade dos ZIPs e comparação dos arquivos empacotados com suas origens.
+
+Os testes de reprodução simulam eventos, teclas, vínculos e respostas do serviço de mídia. Eles não executam uma firmware completa nem comprovam nitidez em uma CRT de 5", latência do USB, comportamento de outro modelo ou compatibilidade com todos os codecs.
+
+## Publicar no GitHub
+
+Extraia o pacote completo e envie seu conteúdo para a raiz do repositório, mantendo `README.md` nessa raiz. Preserve as pastas do código e não inclua saídas locais de `dist/`, `native/build/`, preferências pessoais ou cópias privadas da firmware.
+
+Para a release desta versão, use:
+
+- **Tag:** `v0.6.16`.
+- **Título sugerido:** `Tavinho Play v0.6.16 — Player USB para Multilaser RE510`.
+- **Anexos:** `Tavinho-Play-v0.6.16-Completo.zip`, `Tavinho-Play-v0.6.16-Atualizacao.zip` e `SHA256SUMS-v0.6.16.txt`.
+
+Identifique o completo como o pacote de primeira instalação e a atualização como a opção que preserva o catálogo existente. O GitHub também oferece arquivos automáticos do código-fonte da tag; os nomes dos anexos acima ajudam a distinguir o pacote pronto para uso.
+
+A licença geral do projeto ficou para uma decisão posterior do responsável. Mantenha os avisos dos componentes de terceiros ao preparar o repositório.
+
 ## Créditos e licença
 
 **Tavinho Play / Tavinho Games**
@@ -411,8 +512,8 @@ Execute essas ferramentas na cópia original do projeto, com o catálogo do exem
 - [Instagram — tavinho.games](https://www.instagram.com/tavinho.games)
 - [YouTube — @tavinho-games](https://www.youtube.com/@tavinho-games)
 
-Ícones de GitHub, Instagram, YouTube, pasta e retorno derivados de **Feather Icons**, de Cole Bemis, sob licença MIT. Os avisos e a licença estão em [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) e [assets/feather/FEATHER-LICENSE.txt](assets/feather/FEATHER-LICENSE.txt).
+Ícones de GitHub, Instagram, YouTube, pasta e retorno derivados de **Feather Icons**, Copyright (c) 2013–2023 Cole Bemis, sob licença MIT. O pacote inclui os avisos de terceiros e a licença integral dos ícones.
 
 O Ginga, o sistema do receptor e seus componentes mantêm suas próprias autorias e licenças. As fontes tipográficas e as bibliotecas originais já presentes na firmware não são redistribuídas neste pacote.
 
-A licença geral do código do projeto está indicada em [LICENSE-NOTES.md](LICENSE-NOTES.md).
+A licença geral do código do Tavinho Play ainda não foi definida pelo responsável. A licença MIT dos ícones não atribui automaticamente essa licença aos demais arquivos do projeto.
